@@ -198,6 +198,26 @@ body::before{
 .ds b{ font-size:13px; color:var(--text); font-weight:700; }
 .ds b i{ font-style:normal; font-size:10px; color:var(--muted); margin-left:4px; font-weight:500; }
 
+/* ODOMETER — the most prominent readout; emphasize mileage */
+.ds.odometer{
+  background: linear-gradient(135deg, rgba(90,170,255,.18), rgba(120,90,255,.18));
+  border-color: rgba(140,180,255,.45);
+  flex-direction:column; align-items:flex-start;
+  padding: 10px 12px;
+}
+.ds.odometer label{ font-size:9px; }
+.ds.odometer b{
+  font-family: var(--mono);
+  font-size: 22px; line-height:1;
+  letter-spacing:0.02em;
+  color: #cfe4ff;
+  font-variant-numeric: tabular-nums;
+}
+.ds.odometer em{
+  font-style:normal; font-size:10px; color:var(--muted);
+  letter-spacing:.18em; margin-top:4px;
+}
+
 .bar-wrap{ display:inline-flex; align-items:center; gap:6px; }
 .bar{ width:80px; height:6px; border-radius:99px; background:rgba(255,255,255,.08); overflow:hidden; }
 .bar i{ display:block; height:100%; background: linear-gradient(90deg, #5fdc8d, #5af); transition: width .4s ease; }

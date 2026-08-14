@@ -72,12 +72,24 @@ function setupConsole() {
 
 /* ============================================================================
    2) Drone telemetry
-   The canvas follows a fixed, smoothed railway corridor fetched from /api/path.
-   The drone is drawn over the corridor as a moving marker.
+   Cleaner model: virtual parametric oval orbit, drone loops around it at
+   constant ground speed, with a fading motion trail and a heading vector.
+   Distance accumulates each frame to drive the 里程 (km) odometer.
 ============================================================================ */
 function setupDrone() {
   const canvas = $('#drone-canvas');
   const ctx = canvas.getContext('2d');
+
+  // Virtual orbit geometry
+  const ORBIT_LEN_M  = 6800;            // loop length in metres (visual)
+  const NOMINAL_SPEED_MS = 28.0;       // ground speed (visible motion)
+  const ORBIT_PERIOD = ORBIT_LEN_M / NOMINAL_SPEED_MS;
+  const ORBIT = { cx:0.5, cy:0.55, rxFrac:0.42, ryFrac:0.34 };
+  const trail = [];                    // {t,x,y,h}
+  let lastSampleMs = performance.now();
+  let totalDistance = 0;               // cumulative metres
+  const odoEl      = $('#d-odo');
+  const odoTripsEl = $('#d-odo-trips');
 
   function fitCanvas() {
     const r = canvas.getBoundingClientRect();
@@ -87,217 +99,201 @@ function setupDrone() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   fitCanvas();
-  window.addEventListener('resize', () => { fitCanvas(); drawDrone(); });
+  window.addEventListener('resize', () => { fitCanvas(); drawScene(); });
 
-  // Pre-fetch the static path; without it we have nothing to draw.
-  async function fetchPath() {
-    const r = await fetch('/api/path');
-    const j = await r.json();
-    state.drone.path = j.points;
-    // compute stable bounds
-    let mnLat =  Infinity, mxLat = -Infinity, mnLon =  Infinity, mxLon = -Infinity;
-    for (const p of j.points) {
-      if (p.lat < mnLat) mnLat = p.lat;
-      if (p.lat > mxLat) mxLat = p.lat;
-      if (p.lon < mnLon) mnLon = p.lon;
-      if (p.lon > mxLon) mxLon = p.lon;
-    }
-    const padLat = Math.max(1e-5, (mxLat - mnLat) * 0.18);
-    const padLon = Math.max(1e-5, (mxLon - mnLon) * 0.18);
-    state.drone.bbox = {
-      minLat: mnLat - padLat, maxLat: mxLat + padLat,
-      minLon: mnLon - padLon, maxLon: mxLon + padLon,
-    };
-  }
-
-  function latLonToXY(lat, lon) {
-    const { minLat, maxLat, minLon, maxLon } = state.drone.bbox;
-    const r = canvas.getBoundingClientRect();
-    const u = (lon - minLon) / (maxLon - minLon);
-    const v = 1 - (lat - minLat) / (maxLat - minLat);
-    return { x: u * r.width, y: v * r.height };
-  }
-
-  // unit normal at point i along the smoothed path (used for parallel rails)
-  function normalAt(i) {
-    const pts = state.drone.path;
-    const n = pts.length;
-    const a = pts[(i - 1 + n) % n];
-    const b = pts[(i + 1) % n];
-    const dx = b.lon - a.lon;
-    const dy = b.lat - a.lat;  // (lat, lon) -> (y, x) in screen terms
-    const len = Math.hypot(dx, dy) || 1;
-    // left perpendicular in lon/lat space: (-dy, dx)/len
-    return { nx: -dy / len, ny: dx / len };
-  }
-
-  function pathToCanvasOffsets(offsetMeters) {
-    // convert a perpendicular offset (meters) into approximate lat/lon delta
-    const offset = offsetMeters / 111320.0;
-    const out = [];
-    for (let i = 0; i < state.drone.path.length; i++) {
-      const p = state.drone.path[i];
-      const nm = normalAt(i);
-      out.push({
-        lat: p.lat + nm.ny * offset,
-        lon: p.lon + nm.nx * offset,
-      });
-    }
-    return out;
-  }
-
-  function drawStaticRailway() {
-    if (!state.drone.path || !state.drone.bbox) return;
+  // 0..1 progress → (x, y, heading-deg-cw-from-north) on the oval
+  function posOnOrbit(t) {
     const r = canvas.getBoundingClientRect();
     const w = r.width, h = r.height;
-
-    // 1) railway background (dim) — two parallel rails offset 0.7 m either side
-    const railOffset = 0.7;  // meters
-    const upper = pathToCanvasOffsets( railOffset);
-    const lower = pathToCanvasOffsets(-railOffset);
-    const path  = state.drone.path;
-
-    // soft fill band between rails (ballast bed)
-    ctx.beginPath();
-    const p0 = latLonToXY(upper[0].lat, upper[0].lon);
-    ctx.moveTo(p0.x, p0.y);
-    for (let i = 1; i < upper.length; i++) {
-      const p = latLonToXY(upper[i].lat, upper[i].lon);
-      ctx.lineTo(p.x, p.y);
-    }
-    for (let i = lower.length - 1; i >= 0; i--) {
-      const p = latLonToXY(lower[i].lat, lower[i].lon);
-      ctx.lineTo(p.x, p.y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(180,150,120,.10)';
-    ctx.fill();
-
-    // ties (sleepers) — short perpendiculars every ~12 m along the path
-    ctx.strokeStyle = 'rgba(220,200,170,.18)';
-    ctx.lineWidth = 1.2;
-    // sample ties every Nth path vertex; the smoothed path has 24*14 ≈ 336 pts
-    const step = 8;
-    for (let i = 0; i < path.length; i += step) {
-      const u = latLonToXY(upper[i].lat, upper[i].lon);
-      const l = latLonToXY(lower[i].lat, lower[i].lon);
-      ctx.beginPath();
-      ctx.moveTo(u.x, u.y);
-      ctx.lineTo(l.x, l.y);
-      ctx.stroke();
-    }
-
-    // rails themselves (two bright strokes)
-    ctx.strokeStyle = 'rgba(220,210,200,.55)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    upper.forEach((pt, i) => {
-      const p = latLonToXY(pt.lat, pt.lon);
-      i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
-    });
-    ctx.stroke();
-    ctx.beginPath();
-    lower.forEach((pt, i) => {
-      const p = latLonToXY(pt.lat, pt.lon);
-      i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
-    });
-    ctx.stroke();
+    const cx = w * ORBIT.cx, cy = h * ORBIT.cy;
+    const rx = w * ORBIT.rxFrac, ry = h * ORBIT.ryFrac;
+    const theta = -2 * Math.PI * (t % 1);
+    const x  = cx + rx * Math.cos(theta);
+    const y  = cy + ry * Math.sin(theta);
+    const tx = -rx * Math.sin(theta);
+    const ty =  ry * Math.cos(theta);
+    let hdg = Math.atan2(tx, -ty) * 180 / Math.PI;
+    hdg = (hdg + 360) % 360;
+    return { x, y, hdg };
   }
 
-  function drawDrone() {
+  function drawOrbit() {
+    const r = canvas.getBoundingClientRect();
+    const w = r.width, h = r.height;
+    const cx = w * ORBIT.cx, cy = h * ORBIT.cy;
+    const rx = w * ORBIT.rxFrac, ry = h * ORBIT.ryFrac;
+
+    // 1) soft ground gradient inside the oval
+    const grd = ctx.createRadialGradient(cx, cy, Math.min(rx, ry)*0.3, cx, cy, Math.max(rx, ry)*1.0);
+    grd.addColorStop(0, 'rgba(80,140,180,0.10)');
+    grd.addColorStop(1, 'rgba(80,140,180,0.00)');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx*0.92, ry*0.92, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // 2) outer fence ring
+    ctx.strokeStyle = 'rgba(110,160,200,0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
+    ctx.stroke();
+
+    // 3) railway: ballast fill + ties + two rails
+    const railGap = 4;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx + railGap + 4, ry + railGap + 4, 0, 0, Math.PI*2);
+    ctx.ellipse(cx, cy, rx - railGap - 4, ry - railGap - 4, 0, Math.PI*2, true);
+    ctx.fillStyle = 'rgba(180,150,120,0.10)';
+    ctx.fill('evenodd');
+    ctx.strokeStyle = 'rgba(220,200,170,0.22)';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 64; i++) {
+      const a = (i / 64) * 2 * Math.PI;
+      const x1 = cx + (rx - railGap) * Math.cos(a);
+      const y1 = cy + (ry - railGap) * Math.sin(a);
+      const x2 = cx + (rx + railGap) * Math.cos(a);
+      const y2 = cy + (ry + railGap) * Math.sin(a);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(220,210,200,0.55)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx + railGap, ry + railGap, 0, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx - railGap, ry - railGap, 0, 0, Math.PI*2);
+    ctx.stroke();
+
+    // 4) start/finish marker at θ=0 (east)
+    const sx = cx + rx, sy = cy;
+    ctx.fillStyle = 'rgba(140,200,255,0.9)';
+    ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(140,200,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI*2); ctx.stroke();
+
+    // 5) compass
+    ctx.fillStyle = 'rgba(140,160,180,0.55)';
+    ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    [['N', cx, cy - ry - 14],
+     ['S', cx, cy + ry + 14],
+     ['E', cx + rx + 14, cy],
+     ['W', cx - rx - 14, cy]].forEach(([t,x,y]) => ctx.fillText(t, x, y));
+  }
+
+  function drawTrail() {
+    if (trail.length < 2) return;
+    const N = trail.length;
+    const now = trail[N - 1].t;
+    for (let i = 1; i < N; i++) {
+      const age = (now - trail[i].t) / 1000;
+      const alpha = Math.max(0.06, 1 - age / 8);
+      const a = trail[i - 1], b = trail[i];
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = 'rgba(140,210,255,' + (alpha*0.18) + ')';
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(140,210,255,' + (alpha*0.9) + ')';
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+  }
+
+  function drawQuadcopter(x, y, hdgDeg) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((hdgDeg - 90) * Math.PI / 180);
+    ctx.fillStyle = 'rgba(140,210,255,0.18)';
+    ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI*2); ctx.fill();
+    // body diamond
+    ctx.fillStyle = '#5af';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(0, -5); ctx.lineTo(8, 0); ctx.lineTo(0, 5); ctx.lineTo(-8, 0);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // 4 motors
+    const motors = [[ 22, 22], [ 22, -22], [-22, 22], [-22, -22]];
+    for (const [mx, my] of motors) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(mx * 0.5, my * 0.5); ctx.stroke();
+      ctx.fillStyle = '#0a0f1a';
+      ctx.strokeStyle = '#5af';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(mx, my, 4.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = 'rgba(140,210,255,0.22)';
+      ctx.beginPath(); ctx.ellipse(mx, my, 6.5, 1.5, 0, 0, Math.PI*2); ctx.fill();
+    }
+    // heading vector
+    ctx.strokeStyle = '#cfe4ff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(34, 0); ctx.stroke();
+    ctx.fillStyle = '#cfe4ff';
+    ctx.beginPath(); ctx.moveTo(34, 0); ctx.lineTo(28, -4); ctx.lineTo(28, 4); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawScene(t) {
     const r = canvas.getBoundingClientRect();
     const w = r.width, h = r.height;
     ctx.clearRect(0, 0, w, h);
 
-    // background grid
-    ctx.strokeStyle = 'rgba(120,170,255,.06)';
+    ctx.strokeStyle = 'rgba(120,170,255,0.06)';
     ctx.lineWidth = 1;
-    const gridStep = 24;
-    for (let x = 0; x < w; x += gridStep) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-    }
-    for (let y = 0; y < h; y += gridStep) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-    }
+    const step = 24;
+    for (let x = 0; x < w; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let y = 0; y < h; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
 
-    drawStaticRailway();
-
-    // live trail (last few seconds of flight)
-    if (state.drone.trail.length > 1 && state.drone.bbox) {
-      const pts = state.drone.trail.map(p => latLonToXY(p.lat, p.lon));
-      // soft glow underlay
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = 'rgba(120,200,255,.25)';
-      ctx.beginPath();
-      pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
-      ctx.stroke();
-      // bright trail
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = 'rgba(120,200,255,.85)';
-      ctx.beginPath();
-      pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
-      ctx.stroke();
-
-      // drone marker
-      const head = pts[pts.length - 1];
-      // halo
-      const g = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, 22);
-      g.addColorStop(0, 'rgba(120,200,255,.7)');
-      g.addColorStop(1, 'rgba(120,200,255,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(head.x, head.y, 22, 0, 2*Math.PI); ctx.fill();
-      // triangle pointing heading
-      ctx.save();
-      ctx.translate(head.x, head.y);
-      // canvas y is inverted vs lat (north is up), so we rotate by -heading - 90
-      // heading 0 = north = up; we want a triangle to point along the heading.
-      ctx.rotate((state.drone.heading - 90) * Math.PI / 180);
-      ctx.fillStyle = '#5af';
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(0, -11);
-      ctx.lineTo(8, 9);
-      ctx.lineTo(0, 5);
-      ctx.lineTo(-8, 9);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-      ctx.restore();
+    drawOrbit();
+    drawTrail();
+    if (t !== undefined) {
+      const p = posOnOrbit(t / ORBIT_PERIOD);
+      drawQuadcopter(p.x, p.y, p.hdg);
     }
   }
 
-  async function poll() {
+  async function loop() {
+    const now = performance.now();
+    const dt = (now - lastSampleMs) / 1000;
+    lastSampleMs = now;
+    totalDistance += NOMINAL_SPEED_MS * dt;
+    const progress = (totalDistance / ORBIT_LEN_M) % 1;
+    const tWithin = progress * ORBIT_PERIOD;
+
+    if (odoEl)      odoEl.innerHTML      = (totalDistance/1000).toFixed(3) + '<i>km</i>';
+    if (odoTripsEl) odoTripsEl.textContent = Math.floor(totalDistance / ORBIT_LEN_M) + ' 趟';
+
+    const p = posOnOrbit(progress);
+    if (trail.length === 0 || (now - trail[trail.length - 1].t) > 80) {
+      trail.push({ t: now, x: p.x, y: p.y, h: p.hdg });
+      if (trail.length > 120) trail.shift();
+    }
+
     try {
-      if (!state.drone.bbox) await fetchPath();
       const r = await fetch('/api/drone');
       const d = await r.json();
-
-      state.drone.trail.push({ lat: d.lat, lon: d.lon, h: d.heading });
-      if (state.drone.trail.length > state.drone.trailMax) state.drone.trail.shift();
-
-      // update fields
-      $('#d-lat').innerHTML  = d.lat.toFixed(5);
-      $('#d-lon').innerHTML  = d.lon.toFixed(5);
-      $('#d-alt').innerHTML  = d.alt.toFixed(1) + '<i>m</i>';
-      $('#d-hdg').innerHTML  = d.heading.toFixed(0) + '<i>°</i>';
-      $('#d-spd').innerHTML  = d.speed.toFixed(1) + '<i>m/s</i>';
+      $('#d-lat').textContent  = d.lat.toFixed(5);
+      $('#d-lon').textContent  = d.lon.toFixed(5);
+      $('#d-alt').textContent  = d.alt.toFixed(1);
+      $('#d-hdg').textContent  = d.heading.toFixed(0) + '°';
+      $('#d-spd').textContent  = d.speed.toFixed(1);
       const bat = Math.max(0, Math.min(100, d.battery));
       $('#d-bat').style.width = bat.toFixed(1) + '%';
       $('#d-bat-text').textContent = bat.toFixed(1) + '%';
       $('#d-gps').textContent = d.gps_fix;
       $('#d-sig').textContent = d.signal;
       $('#d-mode').textContent = d.mode;
+    } catch (e) { /* swallow */ }
 
-      state.drone.heading = d.heading;
-      drawDrone();
-    } catch (e) {
-      // ignore
-    } finally {
-      setTimeout(poll, 500);
-    }
+    drawScene(tWithin);
+    requestAnimationFrame(loop);
   }
 
-  fetchPath().then(() => { drawDrone(); poll(); });
+  drawScene();
+  requestAnimationFrame(loop);
 }
 
 /* ============================================================================
@@ -698,7 +694,6 @@ async function init() {
       }
     });
     updateRiskBanner();
-    });
   });
 
   // expand
