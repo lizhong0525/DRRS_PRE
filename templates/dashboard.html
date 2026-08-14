@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>铁路巡检 · 控制台</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=4" />
+</head>
+<body>
+  <!-- =================== TOP BAR =================== -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">⛯</span>
+      <div class="brand-text">
+        <div class="title">铁路巡检 · 风险识别控制台</div>
+        <div class="subtitle">AERIAL RAILWAY PATROL · YOLOv11-seg · mud_pumping</div>
+      </div>
+    </div>
+
+    <nav class="topbar-right">
+      <div class="pill"><span>UPLINK</span><b id="uplink-state">●</b></div>
+      <div class="pill"><span>FPS</span><b id="tps">—</b></div>
+      <div class="pill"><span>MODE</span><b>AUTO</b></div>
+      <a class="link-btn" href="/">返回入口</a>
+    </nav>
+  </header>
+
+  <!-- =================== MAIN GRID =================== -->
+  <main class="grid">
+    <!-- ============ TOP-LEFT: DRONE TELEMETRY ============ -->
+    <section class="card panel-drone" data-card="drone">
+      <header class="card-hd">
+        <span class="hd-tag">TL</span>
+        <h2>无人机 · 实时位置</h2>
+        <span class="hd-status">SIMULATED · <i class="dot-live"></i></span>
+      </header>
+      <div class="card-body drone-body">
+        <div class="drone-canvas-wrap">
+          <canvas id="drone-canvas" width="520" height="320"></canvas>
+          <div class="drone-canvas-overlay">
+            <div class="cross-h"></div>
+            <div class="cross-v"></div>
+            <div class="reticle-n">N</div>
+          </div>
+        </div>
+        <div class="drone-stats">
+          <div class="ds">
+            <label>纬度 LAT</label><b id="d-lat">—</b>
+          </div>
+          <div class="ds">
+            <label>经度 LON</label><b id="d-lon">—</b>
+          </div>
+          <div class="ds">
+            <label>高度 ALT</label><b id="d-alt">—<i>m</i></b>
+          </div>
+          <div class="ds">
+            <label>航向 HDG</label><b id="d-hdg">—<i>°</i></b>
+          </div>
+          <div class="ds">
+            <label>地速 SPD</label><b id="d-spd">—<i>m/s</i></b>
+          </div>
+          <div class="ds">
+            <label>电量 BAT</label>
+            <b class="bar-wrap"><span class="bar"><i id="d-bat" style="width:0%"></i></span><em id="d-bat-text">—</em></b>
+          </div>
+          <div class="ds">
+            <label>GPS</label><b id="d-gps">—</b>
+          </div>
+          <div class="ds">
+            <label>SIGNAL</label><b id="d-sig">—</b>
+          </div>
+          <div class="ds">
+            <label>MODE</label><b id="d-mode">—</b>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TOP-RIGHT: DETECTION RESULTS / STATS ============ -->
+    <section class="card panel-results" data-card="results">
+      <header class="card-hd">
+        <span class="hd-tag">TR</span>
+        <h2>检测结果 · 数据反馈</h2>
+        <span class="hd-status" id="risk-badge">—</span>
+      </header>
+      <div class="card-body results-body">
+        <!-- top KPI strip -->
+        <div class="kpis">
+          <div class="kpi"><label>累计检测</label><b id="kpi-total">0</b></div>
+          <div class="kpi risk"><label>风险检出</label><b id="kpi-risk">0</b></div>
+          <div class="kpi ok"><label>正常样本</label><b id="kpi-normal">0</b></div>
+          <div class="kpi"><label>平均推理</label><b id="kpi-ms">—<i>ms</i></b></div>
+          <div class="kpi"><label>命中率</label><b id="kpi-rate">—<i>%</i></b></div>
+        </div>
+
+        <div class="results-grid">
+          <!-- last detection summary -->
+          <div class="panel-mini">
+            <div class="mini-hd">最近一次检测</div>
+            <div id="last-detection" class="last-detection">
+              <div class="empty">尚未执行检测。选择下方图像开始识别 →</div>
+            </div>
+          </div>
+
+          <!-- class histogram -->
+          <div class="panel-mini">
+            <div class="mini-hd">类别分布</div>
+            <div id="class-hist" class="class-hist">
+              <div class="empty">暂无数据</div>
+            </div>
+          </div>
+
+          <!-- history list -->
+          <div class="panel-mini wide">
+            <div class="mini-hd">检测历史</div>
+            <ol id="history-list" class="history-list">
+              <li class="empty">暂无记录</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ BOTTOM-LEFT: CONSOLE LOG ============ -->
+    <section class="card panel-console" data-card="console">
+      <header class="card-hd">
+        <span class="hd-tag">BL</span>
+        <h2>控制台 · 实时输出</h2>
+        <span class="hd-status"><i class="dot-live"></i> STREAMING</span>
+      </header>
+      <div class="card-body">
+        <div id="console-log" class="console-log" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- ============ BOTTOM-RIGHT: IMAGE DETECTION ============ -->
+    <section class="card panel-detect" data-card="detect">
+      <header class="card-hd">
+        <span class="hd-tag">BR</span>
+        <h2>图像检测</h2>
+        <span class="hd-status">
+          <span id="detect-count">0 / 0</span>
+          <button class="hd-btn" id="expand-btn" title="展开/收起预览">⤢</button>
+        </span>
+      </header>
+      <div class="card-body detect-body">
+        <div class="detect-left">
+          <div id="risk-banner" class="risk-banner">
+            <span class="b-icon">⚠</span>
+            <span class="b-text">检出</span>
+            <span class="b-count" id="risk-banner-count">0</span>
+            <span class="b-text">张</span>
+            <span class="b-tier high">
+              高危 <b id="risk-banner-high">0</b>
+            </span>
+            <span class="b-tier suspect">
+              疑似 <b id="risk-banner-suspect">0</b>
+            </span>
+            <span class="b-tier warn">
+              待确认 <b id="risk-banner-unconfirmed">0</b>
+            </span>
+            <span class="b-hint">翻浆冒泥</span>
+          </div>
+          <div class="detect-section-title">
+            <span class="dot-pending"></span>巡检序列
+            <span class="seq-meta">共 <b id="seq-total">—</b> 张 · 已检测 <b id="seq-done">0</b></span>
+          </div>
+          <ol id="img-patrol" class="img-list patrol-list"></ol>
+
+          <div class="detect-controls">
+            <button id="auto-run-btn" class="primary-btn">▶ 自动巡检（发现式）</button>
+            <button id="clear-btn" class="ghost-btn">清除结果</button>
+          </div>
+        </div>
+
+        <div class="detect-right">
+          <div id="detect-stage" class="detect-stage empty">
+            <div class="placeholder">
+              <div class="ph-icon">⌖</div>
+              <div class="ph-text">选择左侧图像进行 YOLOv11 翻浆冒泥检测</div>
+              <div class="ph-hint">支持鼠标拖拽 / 滚轮缩放查看结果</div>
+            </div>
+          </div>
+          <div class="detect-tags" id="detect-tags"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ EXPANDED PREVIEW OVERLAY ============ -->
+  <div id="expand-overlay" class="expand-overlay hidden">
+    <div class="expand-bar">
+      <span id="expand-title">预览</span>
+      <button id="expand-close" class="hd-btn">✕ 关闭</button>
+    </div>
+    <div id="expand-stage" class="expand-stage"></div>
+  </div>
+
+  <script src="/static/js/app.v5.js"></script>
+</body>
+</html>

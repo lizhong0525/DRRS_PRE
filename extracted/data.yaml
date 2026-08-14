@@ -1,0 +1,5 @@
+path: E:/mud_pumping_yolo_dataset
+train: images/train
+val: images/val
+names:
+  0: mud_pumping

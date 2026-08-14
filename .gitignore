@@ -1,0 +1,58 @@
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+
+# virtualenv
+.venv/
+venv/
+env/
+
+# build / package
+dist/
+build/
+
+# editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+server.log
+
+# model weights (large binary files)
+extracted/weights/
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# training run artifacts (large charts)
+extracted/train_results/
+
+# user-supplied & demo image data
+images_normal/
+images_risk/
+images_problem/
+
+# runtime caches
+static/results/
+static/original/
+__output__/
+
+# debug-only files
+shots/
+check_js.py
+find_brace.py
+find_imbalance.py
+app.v5.js
+
+# python binary artifacts from us running locally
+*.pyc
+
+# env
+.env

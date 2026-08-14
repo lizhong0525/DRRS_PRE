@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>铁路巡检风险识别 · 进入</title>
+  <style>
+    *,*::before,*::after { box-sizing: border-box; }
+    html,body { margin:0; height:100%; background:#06080d; color:#e6e9ef;
+                font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC",
+                             "Microsoft YaHei", sans-serif; overflow:hidden; }
+    body {
+      background:
+        radial-gradient(ellipse at 20% 30%, rgba(40,80,140,.30), transparent 55%),
+        radial-gradient(ellipse at 80% 70%, rgba(140,40,80,.20), transparent 55%),
+        linear-gradient(180deg, #04060a 0%, #0a0f1a 100%);
+    }
+    /* faint grid */
+    body::before {
+      content:""; position:fixed; inset:0; pointer-events:none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+      background-size: 48px 48px, 48px 48px;
+    }
+
+    .stage {
+      position:relative; height:100vh; display:flex; align-items:center;
+      justify-content:center; flex-direction:column; gap:48px; z-index:1;
+    }
+
+    .badge {
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 14px; border:1px solid rgba(120,180,255,.4);
+      border-radius:999px; background:rgba(120,180,255,.06);
+      font-size:12px; letter-spacing:.18em; color:#9bbbe0;
+      text-transform:uppercase;
+    }
+    .badge .dot {
+      width:7px; height:7px; border-radius:50%;
+      background:#5af; box-shadow:0 0 10px #5af;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse { 50% { transform:scale(.6); opacity:.4; } }
+
+    h1 {
+      margin:0; font-size:clamp(40px, 6vw, 78px); font-weight:800;
+      letter-spacing:.04em; line-height:1.1; text-align:center;
+      background: linear-gradient(120deg, #fff 0%, #9ec5ff 50%, #f8b9c8 100%);
+      -webkit-background-clip:text; background-clip:text;
+      color:transparent;
+      text-shadow: 0 0 50px rgba(120,170,255,.15);
+    }
+    h1 small {
+      display:block; margin-top:14px; font-size:14px; font-weight:500;
+      letter-spacing:.32em; color:#6b88a8; text-transform:uppercase;
+      background:none; -webkit-text-fill-color:#6b88a8;
+    }
+
+    .enter-btn {
+      --c1:#5af; --c2:#f68;
+      position:relative; display:inline-flex; align-items:center; gap:14px;
+      padding:18px 42px; border-radius:14px; cursor:pointer;
+      font-size:18px; font-weight:700; letter-spacing:.18em;
+      color:#fff; text-transform:uppercase;
+      background: linear-gradient(135deg, rgba(90,170,255,.22), rgba(255,100,140,.22));
+      border:1px solid rgba(160,200,255,.5);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,.04) inset,
+        0 18px 60px -10px rgba(80,140,255,.45);
+      transition: transform .25s ease, box-shadow .25s ease, background .25s ease;
+      backdrop-filter: blur(6px);
+    }
+    .enter-btn:hover {
+      transform: translateY(-2px);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,.1) inset,
+        0 26px 80px -10px rgba(80,140,255,.65);
+      background: linear-gradient(135deg, rgba(90,170,255,.35), rgba(255,100,140,.32));
+    }
+    .enter-btn:active { transform: translateY(0); }
+    .enter-btn .arrow { font-size:22px; line-height:1; }
+
+    .meta {
+      display:flex; gap:32px; flex-wrap:wrap; justify-content:center;
+      font-size:12px; color:#6c7c95; letter-spacing:.15em;
+    }
+    .meta b { color:#a8bcd9; font-weight:600; }
+
+    .foot {
+      position:absolute; bottom:20px; left:0; right:0;
+      text-align:center; font-size:11px; color:#4a5a72;
+      letter-spacing:.32em;
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <span class="badge"><span class="dot"></span> RAILWAY · AERIAL · YOLOv11-seg</span>
+
+    <h1>
+      铁路巡检风险识别
+      <small>UAV AERIAL · SEGMENTATION · DASHBOARD</small>
+    </h1>
+
+    <a class="enter-btn" href="/dashboard">
+      进入控制台
+      <span class="arrow">→</span>
+    </a>
+
+    <div class="meta">
+      <span>模型 <b>YOLOv11-nano · seg</b></span>
+      <span>类别 <b>mud_pumping</b></span>
+      <span>数据 <b>航拍路基图像</b></span>
+    </div>
+  </main>
+
+  <div class="foot">RAILWAY PATROL · v1.0</div>
+</body>
+</html>
