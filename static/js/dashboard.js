@@ -23,6 +23,10 @@ const state = {
   drone: { trail: [], trailMax: 200 },
   running: false,
   abort: null,
+  // Per-image cache of the most recent detection result so the user can click
+  // around between images and still see the saved annotation without re-running
+  // inference. Key is img.id (e.g. "risk/ea15b2d8086cfbb...jpg").
+  results: {},
 };
 
 /* ============================================================================
@@ -332,6 +336,17 @@ async function loadImages() {
 function selectImage(img) {
   state.selected = img;
   $$('.img-list li').forEach(el => el.classList.toggle('active', el.dataset.id === img.id));
+  // Replay the most recent detection for this image if cached, otherwise
+  // show the original with a '立即检测' button.
+  const cached = state.results[img.id];
+  if (cached) {
+    renderAnnotationFromCache(img, cached);
+  } else {
+    renderOriginal(img);
+  }
+}
+
+function renderOriginal(img) {
   const stage = $('#detect-stage');
   stage.classList.remove('empty');
   stage.innerHTML = '';
@@ -344,9 +359,71 @@ function selectImage(img) {
   ovr.innerHTML = `
     <span class="oi">#${String(img.index).padStart(2,'0')} · ${img.name}</span>
     <span class="oi">待检测样本</span>
-    <span class="oi">未确认</span>
+    <span class="oi">点击下方立即检测</span>
   `;
   stage.appendChild(ovr);
+  const btn = document.createElement('button');
+  btn.className = 'primary-btn';
+  btn.style.cssText = 'position:absolute;left:50%;top:60%;transform:translate(-50%,0);z-index:3;';
+  btn.textContent = '▶ 立即检测这张';
+  btn.addEventListener('click', () => runDetection(img));
+  stage.appendChild(btn);
+}
+
+function renderAnnotationFromCache(img, cached) {
+  const stage = $('#detect-stage');
+  stage.classList.remove('empty');
+  stage.innerHTML = '';
+  // force a fresh <img> each time so the cache-busting timestamp doesn't get skipped
+  const imgEl = document.createElement('img');
+  imgEl.src = cached.annotated_url + '#t=' + Date.now();
+  imgEl.alt = img.name;
+  stage.appendChild(imgEl);
+
+  const ovr = document.createElement('div');
+  ovr.className = 'overlay-info';
+  const lvlCls = ({
+    'NORMAL':        'ok',
+    'UNCONFIRMED':    'warn',
+    'SUSPECT':       'suspect',
+    'HIGH':          'risk',
+  })[cached.risk_level] || '';
+  const tc = cached.tier_counts || {};
+  const tierParts = [];
+  if (tc.high)        tierParts.push(`<span class="oi risk">HIGH ${tc.high}</span>`);
+  if (tc.suspect)     tierParts.push(`<span class="oi suspect">SUSPECT ${tc.suspect}</span>`);
+  if (tc.unconfirmed) tierParts.push(`<span class="oi warn">UNCONFIRMED ${tc.unconfirmed}</span>`);
+  ovr.innerHTML = `
+    <span class="oi ${lvlCls}">风险等级: ${cached.risk_level}</span>
+    <span class="oi">${cached.ts || ''}</span>
+    ${tierParts.join('')}
+    <span class="oi">检测 ${cached.n} 个目标</span>
+    <span class="oi">${cached.inference_ms.toFixed(0)} ms</span>
+  `;
+  stage.appendChild(ovr);
+
+  const tags = $('#detect-tags');
+  tags.innerHTML = '';
+  if (!cached.detections || cached.detections.length === 0) {
+    const t = document.createElement('span');
+    t.className = 'tag ok'; t.textContent = '无检出';
+    tags.appendChild(t);
+  } else {
+    for (const d of cached.detections) {
+      const t = document.createElement('span');
+      const cls = d.tier === 'high' ? 'risk' : d.tier === 'suspect' ? 'suspect' : 'warn';
+      t.className = `tag ${cls}`;
+      t.textContent = `${d.tier_cn} · ${d.class_cn} · ${(d.conf*100).toFixed(1)}%`;
+      tags.appendChild(t);
+    }
+  }
+
+  const btn = document.createElement('button');
+  btn.className = 'ghost-btn';
+  btn.style.cssText = 'position:absolute;right:14px;bottom:14px;z-index:3;';
+  btn.textContent = '↻ 重新检测';
+  btn.addEventListener('click', () => runDetection(img));
+  stage.appendChild(btn);
 }
 
 function setSlotState(img, outcome, tier) {
@@ -424,49 +501,19 @@ async function runDetection(img, opts = {}) {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'detect failed');
 
-    // render annotated image
-    stage.innerHTML = '';
-    const out = document.createElement('img');
-    out.src = j.annotated_url + '?t=' + Date.now();
-    out.alt = img.name;
-    stage.appendChild(out);
+    // save the result so revisiting this image replays the annotation
+    state.results[img.id] = {
+      annotated_url: j.annotated_url,
+      n: j.n,
+      risk_level: j.risk_level,
+      tier_counts: j.tier_counts,
+      detections: j.detections,
+      inference_ms: j.inference_ms,
+      ts: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    };
 
-    const ovr = document.createElement('div');
-    ovr.className = 'overlay-info';
-    const lvlCls = ({
-      'NORMAL':        'ok',
-      'UNCONFIRMED':    'warn',
-      'SUSPECT':       'suspect',
-      'HIGH':          'risk',
-    })[j.risk_level] || '';
-    const tierParts = [];
-    const tc = j.tier_counts || {};
-    if (tc.high)        tierParts.push(`<span class="oi risk">HIGH ${tc.high}</span>`);
-    if (tc.suspect)     tierParts.push(`<span class="oi suspect">SUSPECT ${tc.suspect}</span>`);
-    if (tc.unconfirmed) tierParts.push(`<span class="oi warn">UNCONFIRMED ${tc.unconfirmed}</span>`);
-    ovr.innerHTML = `
-      <span class="oi ${lvlCls}">风险等级: ${j.risk_level}</span>
-      ${tierParts.join('')}
-      <span class="oi">检测 ${j.n} 个目标</span>
-      <span class="oi">${j.inference_ms.toFixed(0)} ms</span>
-    `;
-    stage.appendChild(ovr);
-
-    // tags (each detection colored by its tier)
-    tags.innerHTML = '';
-    if (j.detections.length === 0) {
-      const t = document.createElement('span');
-      t.className = 'tag ok'; t.textContent = '无检出';
-      tags.appendChild(t);
-    } else {
-      for (const d of j.detections) {
-        const t = document.createElement('span');
-        const cls = d.tier === 'high' ? 'risk' : d.tier === 'suspect' ? 'suspect' : 'warn';
-        t.className = `tag ${cls}`;
-        t.textContent = `${d.tier_cn} · ${d.class_cn} · ${(d.conf*100).toFixed(1)}%`;
-        tags.appendChild(t);
-      }
-    }
+    // render annotated image (single source of truth — same helper as selectImage)
+    renderAnnotationFromCache(img, state.results[img.id]);
 
     // discovery: only NOW mark the slot — coloured by highest tier in image
     if (j.n > 0) {
