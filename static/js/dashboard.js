@@ -434,16 +434,16 @@ async function runDetection(img, opts = {}) {
     const ovr = document.createElement('div');
     ovr.className = 'overlay-info';
     const lvlCls = ({
-      '正常':    'ok',
-      '待确认':  'warn',
-      '疑似':    'suspect',
-      '高危':    'risk',
+      'NORMAL':        'ok',
+      'UNCONFIRMED':    'warn',
+      'SUSPECT':       'suspect',
+      'HIGH':          'risk',
     })[j.risk_level] || '';
     const tierParts = [];
     const tc = j.tier_counts || {};
-    if (tc.high)        tierParts.push(`<span class="oi risk">高危 ${tc.high}</span>`);
-    if (tc.suspect)     tierParts.push(`<span class="oi suspect">疑似 ${tc.suspect}</span>`);
-    if (tc.unconfirmed) tierParts.push(`<span class="oi warn">待确认 ${tc.unconfirmed}</span>`);
+    if (tc.high)        tierParts.push(`<span class="oi risk">HIGH ${tc.high}</span>`);
+    if (tc.suspect)     tierParts.push(`<span class="oi suspect">SUSPECT ${tc.suspect}</span>`);
+    if (tc.unconfirmed) tierParts.push(`<span class="oi warn">UNCONFIRMED ${tc.unconfirmed}</span>`);
     ovr.innerHTML = `
       <span class="oi ${lvlCls}">风险等级: ${j.risk_level}</span>
       ${tierParts.join('')}
@@ -470,8 +470,8 @@ async function runDetection(img, opts = {}) {
 
     // discovery: only NOW mark the slot — coloured by highest tier in image
     if (j.n > 0) {
-      const tier_top = j.risk_level === '高危' ? 'high'
-                     : j.risk_level === '疑似' ? 'suspect'
+      const tier_top = j.risk_level === 'HIGH' ? 'high'
+                     : j.risk_level === 'SUSPECT' ? 'suspect'
                      : 'unconfirmed';
       setSlotState(img, 'risk', tier_top);
       state.discoveredRisks.push({
@@ -527,7 +527,7 @@ function refreshStatsLocal(j) {
   // already updated by server; this is for the live UI before next poll
   document.querySelector('#risk-badge').textContent = j.risk_level;
   document.querySelector('#risk-badge').className =
-    'hd-status ' + (j.risk_level === '正常' ? '' : (j.risk_level === '高危' ? 'risk' : 'warn'));
+    'hd-status ' + (j.risk_level === 'NORMAL' ? '' : (j.risk_level === 'HIGH' ? 'risk' : 'warn'));
 }
 
 async function refreshStats() {

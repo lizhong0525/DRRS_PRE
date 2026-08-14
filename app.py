@@ -53,31 +53,31 @@ PROBLEM_DIR = BASE_DIR / "images_problem"
 RESULTS_DIR = BASE_DIR / "static" / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-CLASS_LABEL_CN = {
-    "mud_pumping": "路基翻浆冒泥",
+CLASS_LABEL_EN = {
+    "mud_pumping": "MUD PUMPING",
 }
-RISK_LABEL = "路基翻浆冒泥(危险)"
+RISK_LABEL = "MUD PUMPING (HAZARD)"
 
 # Risk-tier classification thresholds (model confidence → UI tier).
-# 低 conf 也会被截到 0.10，分类按以下三档：
-#   高危   conf >= 0.70  →  red
-#   疑似   0.40 ≤ conf < 0.70  →  orange
-#   待确认 0.10 ≤ conf < 0.40  →  yellow  (模型说可能是，但还没到报警阈值)
+# English labels are used everywhere text is rendered ON THE IMAGE (cv2.putText
+# uses Hershey fonts that don't support CJK → boxes/missing glyphs on Windows).
+# The CSS/HTML chrome still uses Chinese (those are rendered by the browser
+# which handles CJK fine).
 TIER_THRESHOLDS = [
-    (0.70, "高危",   "high",         (60,  60, 250)),   # BGR bright red
-    (0.40, "疑似",   "suspect",      (60, 140, 245)),   # BGR vivid orange
-    (0.10, "待确认", "unconfirmed",  (60, 215, 245)),   # BGR golden yellow
+    (0.70, "HIGH",         "high",         (60,  60, 250)),   # BGR bright red
+    (0.40, "SUSPECT",      "suspect",      (60, 140, 245)),   # BGR vivid orange
+    (0.10, "UNCONFIRMED",  "unconfirmed",  (60, 215, 245)),   # BGR golden yellow
 ]
-TIER_BY_CONF = {cn: th for th, cn, _, _ in TIER_THRESHOLDS}
-TIER_BGR     = {cn: col for _, cn, _, col in TIER_THRESHOLDS}
+TIER_BY_CONF = {lbl: th for th, lbl, _, _ in TIER_THRESHOLDS}
+TIER_BGR     = {lbl: col for _, lbl, _, col in TIER_THRESHOLDS}
 TIER_ORDER   = ["high", "suspect", "unconfirmed"]
 
 
 def _tier_for(conf: float):
-    """Return (tier_cn, tier_en) for a given confidence score."""
-    for th, cn, en, _ in TIER_THRESHOLDS:
+    """Return (tier_label_for_image, tier_en) for a given confidence score."""
+    for th, lbl, en, _ in TIER_THRESHOLDS:
         if conf >= th:
-            return cn, en
+            return lbl, en
     return None, None
 
 
@@ -540,7 +540,7 @@ def api_detect():
         conf = float(boxes.conf[i].item())
         xyxy = boxes.xyxy[i].tolist()
         cls_name = _yolo.names.get(cls_id, str(cls_id))
-        cn = CLASS_LABEL_CN.get(cls_name, cls_name)
+        cn = CLASS_LABEL_EN.get(cls_name, cls_name)
         tier_cn, tier_en = _tier_for(conf)
         detections.append(
             {
@@ -703,9 +703,9 @@ def api_detect():
             }
         )
 
-    # overall risk level = highest tier present (or 正常 if nothing)
+    # overall risk level = highest tier present (or "NORMAL" if nothing)
     top = _top_tier(detections)
-    risk_level = top["tier_cn"] if top else "正常"
+    risk_level = top["tier_cn"] if top else "NORMAL"
     tier_counts = _tally_by_tier(detections)
 
     console.push(
