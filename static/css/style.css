@@ -160,30 +160,75 @@ body::before{
 /* ============================================================================
    DRONE PANEL
 ============================================================================ */
-.drone-body{ display:flex; gap:16px; }
-.drone-canvas-wrap{
-  flex:1; min-width:0; min-height:0;
-  position:relative; border-radius:10px; overflow:hidden;
+.drone-body{ display:flex; gap:16px; align-items:stretch; }
+.drone-instruments{
+  flex: 0 0 38%;
+  min-width:0;
+  display:flex; flex-direction:column; gap:12px;
+  padding:8px 10px;
+  border-radius:10px;
   background: radial-gradient(ellipse at 50% 50%, #0c1422 0%, #04060a 100%);
   border:1px solid rgba(120,170,255,.18);
-  aspect-ratio: 13/8;
 }
-#drone-canvas{ width:100%; height:100%; display:block; }
-.drone-canvas-overlay{ position:absolute; inset:0; pointer-events:none; }
-.cross-h,.cross-v{
-  position:absolute; background: rgba(120,180,255,.15);
+.di-compass{
+  position:relative; flex:1; min-height:180px;
+  display:flex; align-items:center; justify-content:center;
 }
-.cross-h{ left:0; right:0; top:50%; height:1px; }
-.cross-v{ top:0; bottom:0; left:50%; width:1px; }
-.reticle-n{
-  position:absolute; top:6px; left:50%; transform:translateX(-50%);
-  font-family:var(--mono); font-size:11px; color: rgba(120,180,255,.7);
+#drone-compass{ width:100%; height:100%; display:block; max-width:240px; max-height:240px; }
+.di-compass-readout{
+  position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
+  display:flex; align-items:baseline; gap:6px;
+  font-family:var(--mono);
+  background: rgba(0,0,0,.45);
+  border:1px solid rgba(120,170,255,.35);
+  padding: 4px 12px;
+  border-radius: 14px;
+  color: #cfe4ff;
+  font-size: 13px;
+  letter-spacing: .05em;
+}
+.di-compass-readout .di-num{ font-size:18px; font-weight:800; color:#fff; }
+.di-compass-readout .di-cardinal{
+  font-size:11px; color:#5af; font-weight:700;
+  background: rgba(90,170,255,.18); padding: 1px 6px; border-radius: 4px;
 }
 
+.di-bars{
+  display:flex; gap:8px;
+  height: 110px;
+}
+.di-bar{
+  flex:1; min-width:0;
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+}
+.di-bar > label{
+  font-size:9px; color:var(--muted);
+  letter-spacing:.18em; text-transform:uppercase; font-family:var(--sans);
+}
+.di-bar-track{
+  flex:1; width:14px; min-height:30px;
+  background: rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  position:relative; overflow:hidden;
+}
+.di-bar-track > i{
+  position:absolute; left:0; right:0; bottom:0;
+  background: linear-gradient(180deg, #5af 0%, #2575ff 100%);
+  transition: height .25s ease;
+}
+.di-bar-val{
+  font-family:var(--mono); font-size:10px; color:#cfe4ff;
+  display:flex; align-items:baseline; gap:2px;
+}
+.di-bar-val b{ font-size:13px; font-weight:700; color:#fff; }
+.di-bar-val i{ font-size:8px; color:var(--muted); font-style:normal; }
+
 .drone-stats{
-  width:200px; flex-shrink:0;
-  display:grid; grid-template-columns:1fr; gap:8px;
+  flex:1 1 auto; min-width:0;
+  display:grid; grid-template-columns:1fr 1fr; gap:8px;
   font-family:var(--mono);
+  align-content:start;
 }
 .ds{
   display:flex; align-items:center; justify-content:space-between;
@@ -621,13 +666,16 @@ body::before{
       "console"
       "detect";
   }
-  .drone-body{ flex-direction:column; }
-  .drone-stats{ width:auto; grid-template-columns:repeat(3,1fr); }
+  .drone-body{ flex-direction:row; align-items:stretch; }
+  .drone-instruments{ flex: 0 0 280px; }
+  .drone-stats{ grid-template-columns:repeat(3,1fr); }
   .detect-body{ grid-template-columns: 180px 1fr; }
 }
 @media (max-width: 760px){
   .topbar{ flex-direction:column; align-items:flex-start; gap:10px; }
   .topbar-right{ flex-wrap:wrap; }
+  .drone-body{ flex-direction:column; }
+  .drone-instruments{ flex: 0 0 auto; }
   .drone-stats{ grid-template-columns:repeat(2,1fr); }
   .kpis{ grid-template-columns:repeat(3,1fr); }
   .detect-body{ grid-template-columns:1fr; }

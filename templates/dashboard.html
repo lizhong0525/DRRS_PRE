@@ -38,12 +38,30 @@
         <span class="hd-status">SIMULATED · <i class="dot-live"></i></span>
       </header>
       <div class="card-body drone-body">
-        <div class="drone-canvas-wrap">
-          <canvas id="drone-canvas" width="520" height="320"></canvas>
-          <div class="drone-canvas-overlay">
-            <div class="cross-h"></div>
-            <div class="cross-v"></div>
-            <div class="reticle-n">N</div>
+        <div class="drone-instruments">
+          <div class="di-compass">
+            <canvas id="drone-compass" width="220" height="220"></canvas>
+            <div class="di-compass-readout">
+              <span class="di-num" id="d-hdg-num">—</span><i>°</i>
+              <span class="di-cardinal" id="d-hdg-card">N</span>
+            </div>
+          </div>
+          <div class="di-bars">
+            <div class="di-bar">
+              <label>ALT</label>
+              <div class="di-bar-track"><i id="d-alt-bar" style="height:50%"></i></div>
+              <span class="di-bar-val"><b id="d-alt">—</b><i>m</i></span>
+            </div>
+            <div class="di-bar">
+              <label>SPD</label>
+              <div class="di-bar-track"><i id="d-spd-bar" style="height:50%"></i></div>
+              <span class="di-bar-val"><b id="d-spd">—</b><i>m/s</i></span>
+            </div>
+            <div class="di-bar">
+              <label>BAT</label>
+              <div class="di-bar-track"><i id="d-bat-bar" style="height:50%"></i></div>
+              <span class="di-bar-val"><b id="d-bat-pct">—</b><i>%</i></span>
+            </div>
           </div>
         </div>
         <div class="drone-stats">
@@ -59,17 +77,13 @@
             <label>经度 LON</label><b id="d-lon">—</b>
           </div>
           <div class="ds">
-            <label>高度 ALT</label><b id="d-alt">—<i>m</i></b>
-          </div>
-          <div class="ds">
             <label>航向 HDG</label><b id="d-hdg">—<i>°</i></b>
           </div>
           <div class="ds">
-            <label>地速 SPD</label><b id="d-spd">—<i>m/s</i></b>
+            <label>高度 ALT</label><b id="d-alt-val">—<i>m</i></b>
           </div>
           <div class="ds">
-            <label>电量 BAT</label>
-            <b class="bar-wrap"><span class="bar"><i id="d-bat" style="width:0%"></i></span><em id="d-bat-text">—</em></b>
+            <label>地速 SPD</label><b id="d-spd-val">—<i>m/s</i></b>
           </div>
           <div class="ds">
             <label>GPS</label><b id="d-gps">—</b>

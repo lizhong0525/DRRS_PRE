@@ -81,182 +81,122 @@ function setupConsole() {
    Distance accumulates each frame to drive the 里程 (km) odometer.
 ============================================================================ */
 function setupDrone() {
-  const canvas = $('#drone-canvas');
-  const ctx = canvas.getContext('2d');
+  const compassCanvas = $('#drone-compass');
+  const ctx = compassCanvas.getContext('2d');
 
-  // Virtual orbit geometry
-  const ORBIT_LEN_M  = 6800;            // loop length in metres (visual)
-  const NOMINAL_SPEED_MS = 28.0;       // ground speed (visible motion)
-  const ORBIT_PERIOD = ORBIT_LEN_M / NOMINAL_SPEED_MS;
-  const ORBIT = { cx:0.5, cy:0.55, rxFrac:0.42, ryFrac:0.34 };
-  const trail = [];                    // {t,x,y,h}
+  // Odometer (km) — accumulates at nominal patrol speed
+  const ORBIT_LEN_M  = 6800;            // loop length (visual only)
+  const NOMINAL_SPEED_MS = 28.0;       // ground speed
   let lastSampleMs = performance.now();
   let totalDistance = 0;               // cumulative metres
+
+  // Field handles
   const odoEl      = $('#d-odo');
   const odoTripsEl = $('#d-odo-trips');
+  const hdgNumEl   = $('#d-hdg-num');
+  const hdgCardEl  = $('#d-hdg-card');
+  const altBarEl   = $('#d-alt-bar');
+  const altEl      = $('#d-alt');
+  const altValEl   = $('#d-alt-val');
+  const spdBarEl   = $('#d-spd-bar');
+  const spdEl      = $('#d-spd');
+  const spdValEl   = $('#d-spd-val');
+  const batBarEl   = $('#d-bat-bar');
+  const batPctEl   = $('#d-bat-pct');
+
+  // live heading (updated from /api/drone)
+  let liveHdg = 0;
 
   function fitCanvas() {
-    const r = canvas.getBoundingClientRect();
+    const r = compassCanvas.getBoundingClientRect();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width  = Math.max(1, Math.round(r.width  * dpr));
-    canvas.height = Math.max(1, Math.round(r.height * dpr));
+    compassCanvas.width  = Math.max(1, Math.round(r.width  * dpr));
+    compassCanvas.height = Math.max(1, Math.round(r.height * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   fitCanvas();
-  window.addEventListener('resize', () => { fitCanvas(); drawScene(); });
+  window.addEventListener('resize', () => { fitCanvas(); drawCompass(); });
 
-  // 0..1 progress → (x, y, heading-deg-cw-from-north) on the oval
-  function posOnOrbit(t) {
-    const r = canvas.getBoundingClientRect();
+  function cardinal(h) {
+    const labels = ['N','NE','E','SE','S','SW','W','NW'];
+    return labels[Math.round(((h % 360) + 360) / 45) % 8];
+  }
+
+  // Compass dial: as the drone rotates, the dial rotates the OPPOSITE way
+  // so the drone's heading stays at the top center.
+  function drawCompass() {
+    const r = compassCanvas.getBoundingClientRect();
     const w = r.width, h = r.height;
-    const cx = w * ORBIT.cx, cy = h * ORBIT.cy;
-    const rx = w * ORBIT.rxFrac, ry = h * ORBIT.ryFrac;
-    const theta = -2 * Math.PI * (t % 1);
-    const x  = cx + rx * Math.cos(theta);
-    const y  = cy + ry * Math.sin(theta);
-    const tx = -rx * Math.sin(theta);
-    const ty =  ry * Math.cos(theta);
-    let hdg = Math.atan2(tx, -ty) * 180 / Math.PI;
-    hdg = (hdg + 360) % 360;
-    return { x, y, hdg };
-  }
+    const cx = w / 2, cy = h / 2;
+    const radius = Math.min(cx, cy) - 6;
 
-  function drawOrbit() {
-    const r = canvas.getBoundingClientRect();
-    const w = r.width, h = r.height;
-    const cx = w * ORBIT.cx, cy = h * ORBIT.cy;
-    const rx = w * ORBIT.rxFrac, ry = h * ORBIT.ryFrac;
-
-    // 1) soft ground gradient inside the oval
-    const grd = ctx.createRadialGradient(cx, cy, Math.min(rx, ry)*0.3, cx, cy, Math.max(rx, ry)*1.0);
-    grd.addColorStop(0, 'rgba(80,140,180,0.10)');
-    grd.addColorStop(1, 'rgba(80,140,180,0.00)');
-    ctx.fillStyle = grd;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, rx*0.92, ry*0.92, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    // 2) outer fence ring
-    ctx.strokeStyle = 'rgba(110,160,200,0.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
-    ctx.stroke();
-
-    // 3) railway: ballast fill + ties + two rails
-    const railGap = 4;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, rx + railGap + 4, ry + railGap + 4, 0, 0, Math.PI*2);
-    ctx.ellipse(cx, cy, rx - railGap - 4, ry - railGap - 4, 0, Math.PI*2, true);
-    ctx.fillStyle = 'rgba(180,150,120,0.10)';
-    ctx.fill('evenodd');
-    ctx.strokeStyle = 'rgba(220,200,170,0.22)';
-    ctx.lineWidth = 1.2;
-    for (let i = 0; i < 64; i++) {
-      const a = (i / 64) * 2 * Math.PI;
-      const x1 = cx + (rx - railGap) * Math.cos(a);
-      const y1 = cy + (ry - railGap) * Math.sin(a);
-      const x2 = cx + (rx + railGap) * Math.cos(a);
-      const y2 = cy + (ry + railGap) * Math.sin(a);
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-    }
-    ctx.strokeStyle = 'rgba(220,210,200,0.55)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, rx + railGap, ry + railGap, 0, 0, Math.PI*2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, rx - railGap, ry - railGap, 0, 0, Math.PI*2);
-    ctx.stroke();
-
-    // 4) start/finish marker at θ=0 (east)
-    const sx = cx + rx, sy = cy;
-    ctx.fillStyle = 'rgba(140,200,255,0.9)';
-    ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = 'rgba(140,200,255,0.4)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI*2); ctx.stroke();
-
-    // 5) compass
-    ctx.fillStyle = 'rgba(140,160,180,0.55)';
-    ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    [['N', cx, cy - ry - 14],
-     ['S', cx, cy + ry + 14],
-     ['E', cx + rx + 14, cy],
-     ['W', cx - rx - 14, cy]].forEach(([t,x,y]) => ctx.fillText(t, x, y));
-  }
-
-  function drawTrail() {
-    if (trail.length < 2) return;
-    const N = trail.length;
-    const now = trail[N - 1].t;
-    for (let i = 1; i < N; i++) {
-      const age = (now - trail[i].t) / 1000;
-      const alpha = Math.max(0.06, 1 - age / 8);
-      const a = trail[i - 1], b = trail[i];
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = 'rgba(140,210,255,' + (alpha*0.18) + ')';
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = 'rgba(140,210,255,' + (alpha*0.9) + ')';
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-    }
-  }
-
-  function drawQuadcopter(x, y, hdgDeg) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate((hdgDeg - 90) * Math.PI / 180);
-    ctx.fillStyle = 'rgba(140,210,255,0.18)';
-    ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI*2); ctx.fill();
-    // body diamond
-    ctx.fillStyle = '#5af';
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(0, -5); ctx.lineTo(8, 0); ctx.lineTo(0, 5); ctx.lineTo(-8, 0);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    // 4 motors
-    const motors = [[ 22, 22], [ 22, -22], [-22, 22], [-22, -22]];
-    for (const [mx, my] of motors) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(mx * 0.5, my * 0.5); ctx.stroke();
-      ctx.fillStyle = '#0a0f1a';
-      ctx.strokeStyle = '#5af';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(mx, my, 4.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = 'rgba(140,210,255,0.22)';
-      ctx.beginPath(); ctx.ellipse(mx, my, 6.5, 1.5, 0, 0, Math.PI*2); ctx.fill();
-    }
-    // heading vector
-    ctx.strokeStyle = '#cfe4ff';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(34, 0); ctx.stroke();
-    ctx.fillStyle = '#cfe4ff';
-    ctx.beginPath(); ctx.moveTo(34, 0); ctx.lineTo(28, -4); ctx.lineTo(28, 4); ctx.closePath(); ctx.fill();
-    ctx.restore();
-  }
-
-  function drawScene(t) {
-    const r = canvas.getBoundingClientRect();
-    const w = r.width, h = r.height;
     ctx.clearRect(0, 0, w, h);
 
-    ctx.strokeStyle = 'rgba(120,170,255,0.06)';
-    ctx.lineWidth = 1;
-    const step = 24;
-    for (let x = 0; x < w; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
-    for (let y = 0; y < h; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+    // outer ring
+    ctx.strokeStyle = 'rgba(120,180,255,0.45)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
 
-    drawOrbit();
-    drawTrail();
-    if (t !== undefined) {
-      const p = posOnOrbit(t / ORBIT_PERIOD);
-      drawQuadcopter(p.x, p.y, p.hdg);
+    // inner dark dial
+    ctx.fillStyle = 'rgba(10,16,28,0.6)';
+    ctx.beginPath(); ctx.arc(cx, cy, radius - 2, 0, Math.PI * 2); ctx.fill();
+
+    // 24 minor ticks + 8 major ticks
+    ctx.strokeStyle = 'rgba(120,180,255,0.35)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const r1 = (i % 3 === 0) ? radius - 8 : radius - 4;
+      const r2 = radius;
+      ctx.beginPath();
+      ctx.moveTo(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a));
+      ctx.lineTo(cx + r2 * Math.cos(a), cy + r2 * Math.sin(a));
+      ctx.stroke();
     }
+
+    // 8 cardinal labels (rotated with the heading)
+    ctx.fillStyle = 'rgba(190,210,235,0.85)';
+    ctx.font = 'bold 11px ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const rot = -liveHdg * Math.PI / 180;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+    const labelDist = radius - 16;
+    const labels = ['N','NE','E','SE','S','SW','W','NW'];
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 - Math.PI / 2;
+      const tx = labelDist * Math.cos(a);
+      const ty = labelDist * Math.sin(a);
+      if (i === 0) {
+        ctx.fillStyle = '#ff5d6e';
+        ctx.font = 'bold 14px ui-sans-serif, system-ui, sans-serif';
+        ctx.fillText('N', tx, ty);
+        ctx.font = 'bold 11px ui-sans-serif, system-ui, sans-serif';
+      } else {
+        ctx.fillStyle = 'rgba(190,210,235,0.85)';
+        ctx.fillText(labels[i], tx, ty);
+      }
+    }
+    ctx.restore();
+
+    // fixed top pointer (red triangle indicating the drone's heading)
+    ctx.fillStyle = '#ff5d6e';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - radius + 1);
+    ctx.lineTo(cx - 6, cy - radius + 12);
+    ctx.lineTo(cx + 6, cy - radius + 12);
+    ctx.closePath();
+    ctx.fill();
+
+    // center dot
+    ctx.fillStyle = 'rgba(90,170,255,0.85)';
+    ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function setBar(el, pct) {
+    if (el) el.style.height = (Math.max(0, Math.min(100, pct))).toFixed(0) + '%';
   }
 
   async function loop() {
@@ -264,39 +204,37 @@ function setupDrone() {
     const dt = (now - lastSampleMs) / 1000;
     lastSampleMs = now;
     totalDistance += NOMINAL_SPEED_MS * dt;
-    const progress = (totalDistance / ORBIT_LEN_M) % 1;
-    const tWithin = progress * ORBIT_PERIOD;
 
-    if (odoEl)      odoEl.innerHTML      = (totalDistance/1000).toFixed(3) + '<i>km</i>';
+    if (odoEl)      odoEl.innerHTML      = (totalDistance / 1000).toFixed(3) + '<i>km</i>';
     if (odoTripsEl) odoTripsEl.textContent = Math.floor(totalDistance / ORBIT_LEN_M) + ' 趟';
-
-    const p = posOnOrbit(progress);
-    if (trail.length === 0 || (now - trail[trail.length - 1].t) > 80) {
-      trail.push({ t: now, x: p.x, y: p.y, h: p.hdg });
-      if (trail.length > 120) trail.shift();
-    }
 
     try {
       const r = await fetch('/api/drone');
       const d = await r.json();
       $('#d-lat').textContent  = d.lat.toFixed(5);
       $('#d-lon').textContent  = d.lon.toFixed(5);
-      $('#d-alt').textContent  = d.alt.toFixed(1);
-      $('#d-hdg').textContent  = d.heading.toFixed(0) + '°';
-      $('#d-spd').textContent  = d.speed.toFixed(1);
+      altEl.textContent       = d.alt.toFixed(1);
+      spdEl.textContent       = d.speed.toFixed(1);
+      altValEl.textContent    = d.alt.toFixed(1) + '\u00a0m';
+      spdValEl.textContent    = d.speed.toFixed(1) + '\u00a0m/s';
       const bat = Math.max(0, Math.min(100, d.battery));
-      $('#d-bat').style.width = bat.toFixed(1) + '%';
-      $('#d-bat-text').textContent = bat.toFixed(1) + '%';
+      batPctEl.textContent    = bat.toFixed(0);
+      hdgNumEl.textContent    = d.heading.toFixed(0);
+      hdgCardEl.textContent   = cardinal(d.heading);
       $('#d-gps').textContent = d.gps_fix;
       $('#d-sig').textContent = d.signal;
       $('#d-mode').textContent = d.mode;
+      setBar(altBarEl, (d.alt / 150) * 100);
+      setBar(spdBarEl, (d.speed / 30) * 100);
+      setBar(batBarEl, bat);
+      liveHdg = d.heading;
     } catch (e) { /* swallow */ }
 
-    drawScene(tWithin);
+    drawCompass();
     requestAnimationFrame(loop);
   }
 
-  drawScene();
+  drawCompass();
   requestAnimationFrame(loop);
 }
 
