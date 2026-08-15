@@ -82,6 +82,9 @@ function setupConsole() {
 ============================================================================ */
 function setupDrone() {
   const compassCanvas = $('#drone-compass');
+  // Top-left panel has been replaced by a looping video; skip telemetry UI
+  // setup entirely so we don't crash on missing DOM nodes or fetch the API.
+  if (!compassCanvas) return;
   const ctx = compassCanvas.getContext('2d');
 
   // Odometer (km) — accumulates at nominal patrol speed

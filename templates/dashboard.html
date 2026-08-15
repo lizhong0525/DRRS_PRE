@@ -30,71 +30,23 @@
 
   <!-- =================== MAIN GRID =================== -->
   <main class="grid">
-    <!-- ============ TOP-LEFT: DRONE TELEMETRY ============ -->
+    <!-- ============ TOP-LEFT: LOOPING VIDEO ============ -->
     <section class="card panel-drone" data-card="drone">
       <header class="card-hd">
         <span class="hd-tag">TL</span>
-        <h2>无人机 · 飞行里程</h2>
-        <span class="hd-status">SIMULATED · <i class="dot-live"></i></span>
+        <h2>实时画面 · 巡检视频</h2>
+        <span class="hd-status"><i class="dot-live"></i> LOOPING</span>
       </header>
-      <div class="card-body drone-body">
-        <div class="drone-instruments">
-          <div class="di-compass">
-            <canvas id="drone-compass" width="220" height="220"></canvas>
-            <div class="di-compass-readout">
-              <span class="di-num" id="d-hdg-num">—</span><i>°</i>
-              <span class="di-cardinal" id="d-hdg-card">N</span>
-            </div>
-          </div>
-          <div class="di-bars">
-            <div class="di-bar">
-              <label>ALT</label>
-              <div class="di-bar-track"><i id="d-alt-bar" style="height:50%"></i></div>
-              <span class="di-bar-val"><b id="d-alt">—</b><i>m</i></span>
-            </div>
-            <div class="di-bar">
-              <label>SPD</label>
-              <div class="di-bar-track"><i id="d-spd-bar" style="height:50%"></i></div>
-              <span class="di-bar-val"><b id="d-spd">—</b><i>m/s</i></span>
-            </div>
-            <div class="di-bar">
-              <label>BAT</label>
-              <div class="di-bar-track"><i id="d-bat-bar" style="height:50%"></i></div>
-              <span class="di-bar-val"><b id="d-bat-pct">—</b><i>%</i></span>
-            </div>
-          </div>
-        </div>
-        <div class="drone-stats">
-          <div class="ds odometer">
-            <label>里程 ODO</label>
-            <b id="d-odo">0.000<i>km</i></b>
-            <em id="d-odo-trips">0 趟</em>
-          </div>
-          <div class="ds">
-            <label>纬度 LAT</label><b id="d-lat">—</b>
-          </div>
-          <div class="ds">
-            <label>经度 LON</label><b id="d-lon">—</b>
-          </div>
-          <div class="ds">
-            <label>航向 HDG</label><b id="d-hdg">—<i>°</i></b>
-          </div>
-          <div class="ds">
-            <label>高度 ALT</label><b id="d-alt-val">—<i>m</i></b>
-          </div>
-          <div class="ds">
-            <label>地速 SPD</label><b id="d-spd-val">—<i>m/s</i></b>
-          </div>
-          <div class="ds">
-            <label>GPS</label><b id="d-gps">—</b>
-          </div>
-          <div class="ds">
-            <label>SIGNAL</label><b id="d-sig">—</b>
-          </div>
-          <div class="ds">
-            <label>MODE</label><b id="d-mode">—</b>
-          </div>
-        </div>
+      <div class="card-body video-body">
+        <video
+          class="loop-video"
+          src="/static/video_top_left.mp4"
+          autoplay
+          muted
+          loop
+          playsinline
+          preload="auto"
+        ></video>
       </div>
     </section>
 
